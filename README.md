@@ -1,2 +1,2 @@
 # Chip8InRust
-Incomplete Rust implementation
+Incomplete Rust implementation.
