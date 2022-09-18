@@ -234,7 +234,7 @@ impl Chip8MachineState {
     fn execute_sub_vx_vy(&mut self, x: usize, y: usize) {
         let (result, overflow) = self.state.v[x].overflowing_sub(self.state.v[y]);
         self.state.v[x] = result;
-        self.state.v[0xF] = (!overflow) as u8;
+        self.state.v[0xF] = (!overflow) as u8; // NOT borrow!
     }
 
     fn execute_shr_vx(&mut self, x: usize) {
@@ -245,7 +245,7 @@ impl Chip8MachineState {
     fn execute_subn_vx_vy(&mut self, x: usize, y: usize) {
         let (result, overflow) = self.state.v[y].overflowing_sub(self.state.v[x]);
         self.state.v[x] = result;
-        self.state.v[0xF] = (!overflow) as u8;
+        self.state.v[0xF] = (!overflow) as u8; // NOT borrow!
     }
 
     fn execute_shl_vx(&mut self, x: usize) {
@@ -283,8 +283,8 @@ impl Chip8MachineState {
                 let new_value = row >> (7 - i) & 0x01;
 
                 if new_value == 1 {
-                    let xi = (x + i) % SCREEN_WIDTH;
-                    let yj = (y + j) % SCREEN_HEIGHT;
+                    let xi = (self.state.v[x] as usize + i) % SCREEN_WIDTH;
+                    let yj = (self.state.v[y] as usize + j) % SCREEN_HEIGHT;
                     let old_value = self.get_pixel(xi, yj);
                     
                     if old_value {
