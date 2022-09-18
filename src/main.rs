@@ -1,4 +1,5 @@
-use rand;
+use rand::prelude::*;
+use rand_chacha::ChaCha8Rng;
 
 const V_SIZE: usize = 16;
 const STACK_SIZE: usize = 16;
@@ -80,12 +81,25 @@ struct Chip8MachineState {
     cycles: u64,
     display: [[bool; SCREEN_WIDTH]; SCREEN_HEIGHT],
     keyboard: [bool; KEYBOARD_SIZE],
-    state: Chip8State
+    state: Chip8State,
+	random: ChaCha8Rng
 }
 
 impl Chip8MachineState {
-    fn execute_1_cycle(&mut self) -> ()
+    fn new() -> Chip8MachineState {
+        Chip8MachineState {
+            cycles:0,
+            display: [[false; SCREEN_WIDTH]; SCREEN_HEIGHT],
+            keyboard: [false; KEYBOARD_SIZE],
+            state: Chip8State::new(),
+			random: ChaCha8Rng::from_entropy()
+        }
+    }
+
+    fn execute_cycle(&mut self) -> ()
     {
+        self.cycles += 1;
+
         let address : usize = self.state.pc as usize;
         let instruction = &self.state.memory[address..(address+2)%self.state.memory.len()];
 
@@ -252,7 +266,7 @@ impl Chip8MachineState {
     }
 
     fn execute_rnd_vx_byte(&mut self, x: usize, byte: u8) {
-        self.state.v[x] = rand::random::<u8>() & byte;
+        self.state.v[x] = self.random.gen::<u8>() & byte;
     }
 
     fn execute_draw_vx_vy_nibble(&mut self, x: usize, y: usize, nibble: usize) {
