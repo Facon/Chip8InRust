@@ -92,7 +92,7 @@ impl Chip8MachineState {
             display: [[false; SCREEN_WIDTH]; SCREEN_HEIGHT],
             keyboard: [false; KEYBOARD_SIZE],
             state: Chip8State::new(),
-			random: ChaCha8Rng::from_entropy()
+			random: ChaCha8Rng::from_os_rng()
         }
     }
 
@@ -266,7 +266,7 @@ impl Chip8MachineState {
     }
 
     fn execute_rnd_vx_byte(&mut self, x: usize, byte: u8) {
-        self.state.v[x] = self.random.gen::<u8>() & byte;
+        self.state.v[x] = self.random.random::<u8>() & byte;
     }
 
     fn execute_draw_vx_vy_nibble(&mut self, x: usize, y: usize, nibble: usize) {
