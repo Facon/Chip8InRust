@@ -16,21 +16,21 @@ struct Chip8State {
     sound_timer: u8,
     pc: u16,
     sp: u8,
-    stack: Vec<u16>,
-    memory: Vec<u8>
+    stack: [u16; STACK_SIZE],
+    memory: [u8; MEMORY_SIZE],
 }
 
 impl Chip8State {
-    fn new() -> Chip8State {
-        Chip8State { 
+    fn new() -> Self {
+        Self { 
             v: [0; V_SIZE],
             i: 0,
             delay_timer: 0,
             sound_timer: 0,
-            pc: 0,
+            pc: 0x200, // Program counter starts at 0x200
             sp: 0, 
-            stack: vec![0; STACK_SIZE], 
-            memory: vec![0; MEMORY_SIZE]
+            stack: [0; STACK_SIZE], 
+            memory: [0; MEMORY_SIZE],
         }
     }
 
@@ -82,22 +82,21 @@ struct Chip8MachineState {
     display: [[bool; SCREEN_WIDTH]; SCREEN_HEIGHT],
     keyboard: [bool; KEYBOARD_SIZE],
     state: Chip8State,
-	random: ChaCha8Rng
+	random: ChaCha8Rng,
 }
 
 impl Chip8MachineState {
-    fn new() -> Chip8MachineState {
-        Chip8MachineState {
-            cycles:0,
+    fn new() -> Self {
+        Self {
+            cycles: 0,
             display: [[false; SCREEN_WIDTH]; SCREEN_HEIGHT],
             keyboard: [false; KEYBOARD_SIZE],
             state: Chip8State::new(),
-			random: ChaCha8Rng::from_os_rng()
+			random: ChaCha8Rng::from_os_rng(),
         }
     }
 
-    fn execute_cycle(&mut self) -> ()
-    {
+    fn execute_cycle(&mut self) {
         self.cycles += 1;
 
         let address : usize = self.state.pc as usize;
@@ -151,16 +150,12 @@ impl Chip8MachineState {
             (0xF, _, 0x3, 0x3) => self.execute_ld_b_vx(x),
             (0xF, _, 0x5, 0x5) => self.execute_ld_ref_i_vx(),
             (0xF, _, 0x6, 0x5) => self.execute_ld_vx_ref_i(),
-            _ => panic!("Unknown instruction!")
+            _ => panic!("Unknown instruction at {address:#X}: {instruction:X?}")
         }
     }
 
     fn execute_cls(&mut self) {
-        for y in self.display.iter_mut() {
-            for x in y.iter_mut() {
-                *x = false;
-            }
-        }
+        self.display.iter_mut().for_each(|row| row.fill(false));
     }
 
     fn execute_ret(&mut self) {
@@ -471,7 +466,7 @@ fn should_print_all_instructions() {
 #[test]
 fn should_execute_cls() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x00, 0xE0]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x00, 0xE0]);
     chip8.display[0][0] = true;
     chip8.display[0][1] = true;
     chip8.display[1][1] = true;
@@ -504,7 +499,7 @@ fn should_execute_ret() {
 #[test]
 fn should_execute_sys_addr() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x02, 0x00]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x02, 0x00]);
 
     chip8.execute_cycle();
 
@@ -516,7 +511,7 @@ fn should_execute_sys_addr() {
 #[test]
 fn should_execute_jp_addr() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x12, 0x00]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x12, 0x00]);
 
     chip8.execute_cycle();
 
@@ -526,7 +521,7 @@ fn should_execute_jp_addr() {
 #[test]
 fn should_execute_call_addr() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x22, 0x00]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x22, 0x00]);
 
     chip8.execute_cycle();
 
@@ -538,73 +533,73 @@ fn should_execute_call_addr() {
 #[test]
 fn should_execute_se_vx_byte_should_not_skip() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x30, 0xFF]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x30, 0xFF]);
 
     chip8.execute_cycle();
 
-    assert_eq!(chip8.state.pc, 0x002);
+    assert_eq!(chip8.state.pc, 0x202);
 }
 
 #[test]
 fn should_execute_se_vx_byte_should_skip() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x30, 0xFF]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x30, 0xFF]);
     chip8.state.v[0] = 0xFF;
 
     chip8.execute_cycle();
 
-    assert_eq!(chip8.state.pc, 0x004);
+    assert_eq!(chip8.state.pc, 0x204);
 }
 
 #[test]
 fn should_execute_sne_vx_byte_should_not_skip() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x40, 0xFF]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x40, 0xFF]);
     chip8.state.v[0] = 0xFF;
 
     chip8.execute_cycle();
 
-    assert_eq!(chip8.state.pc, 0x002);
+    assert_eq!(chip8.state.pc, 0x202);
 }
 
 #[test]
 fn should_execute_sne_vx_byte_should_skip() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x40, 0xFF]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x40, 0xFF]);
 
     chip8.execute_cycle();
 
-    assert_eq!(chip8.state.pc, 0x004);
+    assert_eq!(chip8.state.pc, 0x204);
 }
 
 #[test]
 fn should_execute_se_vx_vy_should_not_skip() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x50, 0x20]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x50, 0x20]);
     chip8.state.v[0] = 0xFF;
     chip8.state.v[2] = 0x00;
 
     chip8.execute_cycle();
 
-    assert_eq!(chip8.state.pc, 0x002);
+    assert_eq!(chip8.state.pc, 0x202);
 }
 
 #[test]
 fn should_execute_se_vx_vy_should_skip() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x50, 0x20]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x50, 0x20]);
     chip8.state.v[0] = 0xFF;
     chip8.state.v[2] = 0xFF;
 
     chip8.execute_cycle();
 
-    assert_eq!(chip8.state.pc, 0x004);
+    assert_eq!(chip8.state.pc, 0x204);
 }
 
 #[test]
 fn should_execute_ld_vx_byte() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x63, 0x11]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x63, 0x11]);
 
     chip8.execute_cycle();
 
@@ -614,7 +609,7 @@ fn should_execute_ld_vx_byte() {
 #[test]
 fn should_execute_add_vx_byte() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x7E, 0x11]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x7E, 0x11]);
     chip8.state.v[0xE] = 0x11;
 
     chip8.execute_cycle();
@@ -625,7 +620,7 @@ fn should_execute_add_vx_byte() {
 #[test]
 fn should_execute_ld_vx_vy() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x84, 0x50]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x84, 0x50]);
     chip8.state.v[0x5] = 0xAA;
 
     chip8.execute_cycle();
@@ -636,7 +631,7 @@ fn should_execute_ld_vx_vy() {
 #[test]
 fn should_execute_or_vx_vy() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x84, 0x51]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x84, 0x51]);
     chip8.state.v[0x4] = 0x0B;
     chip8.state.v[0x5] = 0xB0;
 
@@ -648,7 +643,7 @@ fn should_execute_or_vx_vy() {
 #[test]
 fn should_execute_and_vx_vy() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x85, 0x62]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x85, 0x62]);
     chip8.state.v[0x5] = 0x1B;
     chip8.state.v[0x6] = 0xB0;
 
@@ -660,7 +655,7 @@ fn should_execute_and_vx_vy() {
 #[test]
 fn should_execute_xor_vx_vy() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x86, 0x73]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x86, 0x73]);
     chip8.state.v[0x6] = 0xB0;
     chip8.state.v[0x7] = 0xBB;
 
@@ -672,7 +667,7 @@ fn should_execute_xor_vx_vy() {
 #[test]
 fn should_execute_add_vx_vy_should_not_get_carry() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x8C, 0xD4]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x8C, 0xD4]);
     chip8.state.v[0xC] = 0x01;
     chip8.state.v[0xD] = 0x01;
 
@@ -685,7 +680,7 @@ fn should_execute_add_vx_vy_should_not_get_carry() {
 #[test]
 fn should_execute_add_vx_vy_should_get_carry() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x8A, 0xB4]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x8A, 0xB4]);
     chip8.state.v[0xA] = 0xFF;
     chip8.state.v[0xB] = 0xFF;
 
@@ -698,7 +693,7 @@ fn should_execute_add_vx_vy_should_get_carry() {
 #[test]
 fn should_execute_sub_vx_vy_should_get_borrow() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x88, 0x95]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x88, 0x95]);
     chip8.state.v[0x8] = 0x0F;
     chip8.state.v[0x9] = 0x0E;
 
@@ -711,7 +706,7 @@ fn should_execute_sub_vx_vy_should_get_borrow() {
 #[test]
 fn should_execute_sub_vx_vy_should_not_get_borrow() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x86, 0x75]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x86, 0x75]);
     chip8.state.v[0x6] = 0xFE;
     chip8.state.v[0x7] = 0xFF;
 
@@ -724,7 +719,7 @@ fn should_execute_sub_vx_vy_should_not_get_borrow() {
 #[test]
 fn should_execute_shr_vx_should_not_set_vf() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x85, 0x06]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x85, 0x06]);
     chip8.state.v[0x5] = 0xFE;
 
     chip8.execute_cycle();
@@ -736,7 +731,7 @@ fn should_execute_shr_vx_should_not_set_vf() {
 #[test]
 fn should_execute_shr_vx_should_set_vf() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x85, 0x06]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x85, 0x06]);
     chip8.state.v[0x5] = 0xFF;
 
     chip8.execute_cycle();
@@ -748,7 +743,7 @@ fn should_execute_shr_vx_should_set_vf() {
 #[test]
 fn should_execute_subn_vx_vy_should_get_borrow() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x81, 0x27]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x81, 0x27]);
     chip8.state.v[0x1] = 0x0E;
     chip8.state.v[0x2] = 0x0F;
 
@@ -761,7 +756,7 @@ fn should_execute_subn_vx_vy_should_get_borrow() {
 #[test]
 fn should_execute_subn_vx_vy_should_not_get_borrow() {
     let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x81, 0x27]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x81, 0x27]);
     chip8.state.v[0x1] = 0x0F;
     chip8.state.v[0x2] = 0x0E;
 
@@ -774,7 +769,7 @@ fn should_execute_subn_vx_vy_should_not_get_borrow() {
 #[test]
 fn should_execute_shl_vx() {
 	let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x81, 0x2E]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x81, 0x2E]);
     chip8.state.v[0x1] = 0x84;
 
     chip8.execute_cycle();
@@ -786,31 +781,31 @@ fn should_execute_shl_vx() {
 #[test]
 fn should_execute_sne_vx_vy_should_not_skip() {
 	let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x9E, 0xF0]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x9E, 0xF0]);
     chip8.state.v[0xE] = 0x00;
     chip8.state.v[0xF] = 0x00;
 
     chip8.execute_cycle();
 
-    assert_eq!(chip8.state.pc, 0x02);
+    assert_eq!(chip8.state.pc, 0x202);
 }
 
 #[test]
 fn should_execute_sne_vx_vy_should_skip() {
 	let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0x9E, 0xF0]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0x9E, 0xF0]);
     chip8.state.v[0xE] = 0x01;
     chip8.state.v[0xF] = 0x00;
 
     chip8.execute_cycle();
 
-    assert_eq!(chip8.state.pc, 0x04);
+    assert_eq!(chip8.state.pc, 0x204);
 }
 
 #[test]
 fn should_execute_ld_i_addr() {
 	let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0xA2, 0x34]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0xA2, 0x34]);
 
     chip8.execute_cycle();
 
@@ -821,7 +816,7 @@ fn should_execute_ld_i_addr() {
 #[test]
 fn should_execute_jp_v0_addr() {
 	let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0xB3, 0x45]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0xB3, 0x45]);
 	chip8.state.v[0x0] = 0x10;
 
     chip8.execute_cycle();
@@ -833,7 +828,7 @@ fn should_execute_jp_v0_addr() {
 #[test]
 fn should_execute_rnd_vx_byte() {
 	let mut chip8 = Chip8MachineState::new();
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0xC3, 0xFF]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0xC3, 0xFF]);
 	chip8.random = ChaCha8Rng::seed_from_u64(2); // Create fixed number, only for this test!
 
     chip8.execute_cycle();
@@ -854,7 +849,7 @@ fn should_execute_draw_vx_vy_nibble() {
 	let mut chip8 = Chip8MachineState::new();
 	let sprite_location : u16 = 0x300;
 	let sprite_size : u8 = 0x3;
-    chip8.state.memory[0x000 .. 0x002].clone_from_slice(&[0xD5, 0x60 | sprite_size]);
+    chip8.state.memory[0x200 .. 0x202].clone_from_slice(&[0xD5, 0x60 | sprite_size]);
 	chip8.state.i = sprite_location;
 	chip8.state.memory[sprite_location as usize .. 0x300 | sprite_size as usize].clone_from_slice(&[0xFF, 0xFF, 0xFF]);
 	chip8.state.v[0x5] = 0;
@@ -891,4 +886,3 @@ fn should_execute_draw_vx_vy_nibble() {
 	
     assert_eq!(chip8.display, display);
 }
-
