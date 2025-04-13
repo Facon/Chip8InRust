@@ -14,6 +14,19 @@ pub struct Chip8MachineState {
     pub random: ChaCha8Rng,
 }
 
+#[derive(Debug)]
+struct DecodedInstruction {
+    position3: u8,
+    position2: u8,
+    position1: u8,
+    position0: u8,
+    address: u16,
+    nibble: usize,
+    x: usize,
+    y: usize,
+    byte: u8,
+}
+
 impl Chip8MachineState {
     pub fn new() -> Self {
         Self {
@@ -26,61 +39,104 @@ impl Chip8MachineState {
     }
 
     pub fn execute_cycle(&mut self) {
+        let (address, instruction) = self.fetch_instruction();
+
+        let decoded = self.decode_instruction(instruction);
+
+        self.state.pc += 2;
+
+        let result = self.execute_instruction(&decoded);
+
+        if !result {
+            panic!("Unknown or invalid instruction at {address:#X}: {instruction:X?}")
+        }
+
         self.cycles += 1;
+    }
 
+    fn fetch_instruction(&self) -> (usize, [u8; 2]) {
         let address : usize = self.state.pc as usize;
-        let instruction = &self.state.memory[address..(address+2)%self.state.memory.len()];
 
+        if address >= self.state.memory.len() {
+            panic!("Program counter out of bounds: {address:#X}");
+        }
+
+        let instruction: [u8; 2] = if address + 1 < self.state.memory.len() {
+            self.state.memory[address..address + 2].try_into().unwrap()
+        } else {
+            [self.state.memory[address], self.state.memory[0]]
+        };
+
+        (address, instruction)
+    }
+
+    fn decode_instruction(&self, instruction: [u8; 2]) -> DecodedInstruction {
         let position3 = instruction[0] >> 4;
         let position2 = instruction[0] & 0x0F;
         let position1 = instruction[1] >> 4;
         let position0 = instruction[1] & 0x0F;
-        let address: u16 = ((instruction[0] as u16 & 0x0F) << 8) | (instruction[1] as u16);
+        let address = ((instruction[0] as u16 & 0x0F) << 8) | (instruction[1] as u16);
         let nibble = position0 as usize;
         let x = position2 as usize;
         let y = position1 as usize;
         let byte = instruction[1];
 
-        self.state.pc += 2;
+        DecodedInstruction {
+            position3,
+            position2,
+            position1,
+            position0,
+            address,
+            nibble,
+            x,
+            y,
+            byte,
+        }
+    }
 
-        match (position3, position2, position1, position0) {
+    fn execute_instruction(&mut self, decoded: &DecodedInstruction) -> bool {
+        let mut result = true;
+
+        match (decoded.position3, decoded.position2, decoded.position1, decoded.position0) {
             (0x0, 0x0, 0xE, 0x0) => self.execute_cls(),
             (0x0, 0x0, 0xE, 0xE) => self.execute_ret(),
-            (0x0, _, _, _) => self.execute_sys_addr(address),
-            (0x1, _, _, _) => self.execute_jp_addr(address),
-            (0x2, _, _, _) => self.execute_call_addr(address),
-            (0x3, _, _, _) => self.execute_se_vx_byte(x, byte),
-            (0x4, _, _, _) => self.execute_sne_vx_byte(x, byte),
-            (0x5, _, _, 0x0) => self.execute_se_vx_vy(x, y),
-            (0x6, _, _, _) => self.execute_ld_vx_byte(x, byte),
-            (0x7, _, _, _) => self.execute_add_vx_byte(x, byte),
-            (0x8, _, _, 0x0) => self.execute_ld_vx_vy(x, y),
-            (0x8, _, _, 0x1) => self.execute_or_vx_vy(x, y),
-            (0x8, _, _, 0x2) => self.execute_and_vx_vy(x, y),
-            (0x8, _, _, 0x3) => self.execute_xor_vx_vy(x, y),
-            (0x8, _, _, 0x4) => self.execute_add_vx_vy(x, y),
-            (0x8, _, _, 0x5) => self.execute_sub_vx_vy(x, y),
-            (0x8, _, _, 0x6) => self.execute_shr_vx(x),
-            (0x8, _, _, 0x7) => self.execute_subn_vx_vy(x, y),
-            (0x8, _, _, 0xE) => self.execute_shl_vx(x),
-            (0x9, _, _, 0x0) => self.execute_sne_vx_vy(x, y),
-            (0xA, _, _, _) => self.execute_ld_i_addr(address),
-            (0xD, _, _, _) => self.execute_draw_vx_vy_nibble(x, y, nibble),
-            (0xB, _, _, _) => self.execute_jp_v0_addr(address),
-            (0xC, _, _, _) => self.execute_rnd_vx_byte(x, byte),
-            (0xE, _, 0x9, 0xE) => self.execute_skp_vx(x),
-            (0xE, _, 0xA, 0x1) => self.execute_sknp_vx(x),
-            (0xF, _, 0x0, 0x7) => self.execute_ld_vx_dt(x),
-            (0xF, _, 0x0, 0xA) => self.execute_ld_vx_k(x),
-            (0xF, _, 0x1, 0x5) => self.execute_ld_dt_vx(x),
-            (0xF, _, 0x1, 0x8) => self.execute_ld_st_vx(x),
-            (0xF, _, 0x1, 0xE) => self.execute_add_i_vx(x),
-            (0xF, _, 0x2, 0x9) => self.execute_ld_f_vx(x),
-            (0xF, _, 0x3, 0x3) => self.execute_ld_b_vx(x),
+            (0x0, _, _, _) => self.execute_sys_addr(decoded.address),
+            (0x1, _, _, _) => self.execute_jp_addr(decoded.address),
+            (0x2, _, _, _) => self.execute_call_addr(decoded.address),
+            (0x3, _, _, _) => self.execute_se_vx_byte(decoded.x, decoded.byte),
+            (0x4, _, _, _) => self.execute_sne_vx_byte(decoded.x, decoded.byte),
+            (0x5, _, _, 0x0) => self.execute_se_vx_vy(decoded.x, decoded.y),
+            (0x6, _, _, _) => self.execute_ld_vx_byte(decoded.x, decoded.byte),
+            (0x7, _, _, _) => self.execute_add_vx_byte(decoded.x, decoded.byte),
+            (0x8, _, _, 0x0) => self.execute_ld_vx_vy(decoded.x, decoded.y),
+            (0x8, _, _, 0x1) => self.execute_or_vx_vy(decoded.x, decoded.y),
+            (0x8, _, _, 0x2) => self.execute_and_vx_vy(decoded.x, decoded.y),
+            (0x8, _, _, 0x3) => self.execute_xor_vx_vy(decoded.x, decoded.y),
+            (0x8, _, _, 0x4) => self.execute_add_vx_vy(decoded.x, decoded.y),
+            (0x8, _, _, 0x5) => self.execute_sub_vx_vy(decoded.x, decoded.y),
+            (0x8, _, _, 0x6) => self.execute_shr_vx(decoded.x),
+            (0x8, _, _, 0x7) => self.execute_subn_vx_vy(decoded.x, decoded.y),
+            (0x8, _, _, 0xE) => self.execute_shl_vx(decoded.x),
+            (0x9, _, _, 0x0) => self.execute_sne_vx_vy(decoded.x, decoded.y),
+            (0xA, _, _, _) => self.execute_ld_i_addr(decoded.address),
+            (0xD, _, _, _) => self.execute_draw_vx_vy_nibble(decoded.x, decoded.y, decoded.nibble),
+            (0xB, _, _, _) => self.execute_jp_v0_addr(decoded.address),
+            (0xC, _, _, _) => self.execute_rnd_vx_byte(decoded.x, decoded.byte),
+            (0xE, _, 0x9, 0xE) => self.execute_skp_vx(decoded.x),
+            (0xE, _, 0xA, 0x1) => self.execute_sknp_vx(decoded.x),
+            (0xF, _, 0x0, 0x7) => self.execute_ld_vx_dt(decoded.x),
+            (0xF, _, 0x0, 0xA) => self.execute_ld_vx_k(decoded.x),
+            (0xF, _, 0x1, 0x5) => self.execute_ld_dt_vx(decoded.x),
+            (0xF, _, 0x1, 0x8) => self.execute_ld_st_vx(decoded.x),
+            (0xF, _, 0x1, 0xE) => self.execute_add_i_vx(decoded.x),
+            (0xF, _, 0x2, 0x9) => self.execute_ld_f_vx(decoded.x),
+            (0xF, _, 0x3, 0x3) => self.execute_ld_b_vx(decoded.x),
             (0xF, _, 0x5, 0x5) => self.execute_ld_ref_i_vx(),
             (0xF, _, 0x6, 0x5) => self.execute_ld_vx_ref_i(),
-            _ => panic!("Unknown instruction at {address:#X}: {instruction:X?}")
+            (..) => result = false,
         }
+
+        result
     }
 
     fn execute_cls(&mut self) {
