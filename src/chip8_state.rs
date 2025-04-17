@@ -1,3 +1,5 @@
+use std::{fs::File, io::Read, path::Path};
+
 pub const V_SIZE: usize = 16;
 pub const STACK_SIZE: usize = 16;
 pub const MEMORY_SIZE: usize = 4096;
@@ -38,7 +40,7 @@ impl Chip8State {
             0x85, 0x54, 0x86, 0x65, 0x87, 0x76, 0x88, 0x87, 0x89, 0x9E, 0x98, 0x80, 0xA9, 0x99,
             0xBA, 0xAA, 0xCF, 0xBB, 0xD1, 0x23, 0xE0, 0x9E, 0xE0, 0xA1, 0xF1, 0x07, 0xF2, 0x0A,
             0xF3, 0x15, 0xF4, 0x18, 0xF5, 0x1E, 0xF6, 0x29, 0xF7, 0x33, 0xF8, 0x55, 0xF9, 0x65,
-            0xFA, 0x81 // Unknown instruction
+            0xFA, 0x81, // Unknown instruction
         ];
 
         for (i, &byte) in instructions.iter().enumerate() {
@@ -46,5 +48,23 @@ impl Chip8State {
         }
 
         chip8
+    }
+
+    pub fn load_rom<P: AsRef<Path>>(&mut self, rom_path: P, address: usize) -> std::io::Result<()> {
+        let mut file = File::open(rom_path)?;
+        let mut rom_buffer = Vec::new();
+        file.read_to_end(&mut rom_buffer)?;
+
+        let end_address = address + rom_buffer.len();
+
+        if end_address >= MEMORY_SIZE {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "ROM file too large for CHIP-8 memory",
+            ));
+        }
+
+        self.memory[address..end_address].copy_from_slice(&rom_buffer);
+        Ok(())
     }
 }

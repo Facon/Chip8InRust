@@ -64,6 +64,6 @@ fn decrypt_chip8_instruction(instruction: &[u8]) -> String {
         (0xF, _, 0x3, 0x3) => format!("LD B, V{:X}", x),
         (0xF, _, 0x5, 0x5) => format!("LD [I], V{:X}", x),
         (0xF, _, 0x6, 0x5) => format!("LD V{:X}, [I]", x),
-        _ => "Unknown instruction".to_string()
+        _ => "Unknown instruction".to_string(),
     }
 }

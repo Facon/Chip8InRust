@@ -1,6 +1,6 @@
 use crate::chip8_state::Chip8State;
-use rand_chacha::ChaCha8Rng;
 use rand::prelude::*;
+use rand_chacha::ChaCha8Rng;
 
 pub const SCREEN_WIDTH: usize = 64;
 pub const SCREEN_HEIGHT: usize = 32;
@@ -55,7 +55,7 @@ impl Chip8MachineState {
     }
 
     fn fetch_instruction(&self) -> (usize, [u8; 2]) {
-        let address : usize = self.state.pc as usize;
+        let address: usize = self.state.pc as usize;
 
         if address >= self.state.memory.len() {
             panic!("Program counter out of bounds: {address:#X}");
@@ -97,7 +97,12 @@ impl Chip8MachineState {
     fn execute_instruction(&mut self, decoded: &DecodedInstruction) -> bool {
         let mut result = true;
 
-        match (decoded.position3, decoded.position2, decoded.position1, decoded.position0) {
+        match (
+            decoded.position3,
+            decoded.position2,
+            decoded.position1,
+            decoded.position0,
+        ) {
             (0x0, 0x0, 0xE, 0x0) => self.execute_cls(),
             (0x0, 0x0, 0xE, 0xE) => self.execute_ret(),
             (0x0, _, _, _) => self.execute_sys_addr(decoded.address),
@@ -131,8 +136,8 @@ impl Chip8MachineState {
             (0xF, _, 0x1, 0xE) => self.execute_add_i_vx(decoded.x),
             (0xF, _, 0x2, 0x9) => self.execute_ld_f_vx(decoded.x),
             (0xF, _, 0x3, 0x3) => self.execute_ld_b_vx(decoded.x),
-            (0xF, _, 0x5, 0x5) => self.execute_ld_ref_i_vx(),
-            (0xF, _, 0x6, 0x5) => self.execute_ld_vx_ref_i(),
+            (0xF, _, 0x5, 0x5) => self.execute_ld_ref_i_vx(decoded.x),
+            (0xF, _, 0x6, 0x5) => self.execute_ld_vx_ref_i(decoded.x),
             (..) => result = false,
         }
 
@@ -145,22 +150,24 @@ impl Chip8MachineState {
 
     fn execute_ret(&mut self) {
         self.state.sp -= 1;
-        self.state.pc = self.state.stack[self.state.sp as usize]
+        let index = self.state.sp as usize;
+        self.state.pc = self.state.stack[index];
     }
 
     // To check differences with CALL NNN - 0x2NNN.
     fn execute_sys_addr(&mut self, address: u16) {
-        self.execute_call_addr(address);
+        let _ = address;
+        // self.execute_call_addr(address);
     }
 
-    
     fn execute_jp_addr(&mut self, address: u16) {
         self.state.pc = address;
     }
 
     fn execute_call_addr(&mut self, address: u16) {
+        let index = self.state.sp as usize;
+        self.state.stack[index] = self.state.pc;
         self.state.sp += 1;
-        self.state.stack[self.state.sp as usize] = self.state.pc;
         self.state.pc = address;
     }
 
@@ -187,7 +194,7 @@ impl Chip8MachineState {
     }
 
     fn execute_add_vx_byte(&mut self, x: usize, byte: u8) {
-        self.state.v[x] += byte;
+        self.state.v[x] = self.state.v[x].wrapping_add(byte);
     }
 
     fn execute_ld_vx_vy(&mut self, x: usize, y: usize) {
@@ -235,7 +242,11 @@ impl Chip8MachineState {
     }
 
     fn execute_sne_vx_vy(&mut self, x: usize, y: usize) {
-        self.state.pc += if self.state.v[x] != self.state.v[y] { 2 } else { 0 };
+        self.state.pc += if self.state.v[x] != self.state.v[y] {
+            2
+        } else {
+            0
+        };
     }
 
     fn execute_ld_i_addr(&mut self, address: u16) {
@@ -253,7 +264,7 @@ impl Chip8MachineState {
     fn execute_draw_vx_vy_nibble(&mut self, x: usize, y: usize, nibble: usize) {
         let mut collision = false;
         let memory_start_position = self.state.i as usize;
-        let sprite = &self.state.memory[memory_start_position .. memory_start_position + nibble];
+        let sprite = &self.state.memory[memory_start_position..memory_start_position + nibble];
         let copied_sprite = sprite.to_vec();
         let rows = copied_sprite.len();
 
@@ -267,7 +278,7 @@ impl Chip8MachineState {
                     let xi = (self.state.v[x] as usize + i) % SCREEN_WIDTH;
                     let yj = (self.state.v[y] as usize + j) % SCREEN_HEIGHT;
                     let old_value = self.get_pixel(xi, yj);
-                    
+
                     if old_value {
                         collision = true;
                     }
@@ -283,17 +294,25 @@ impl Chip8MachineState {
     pub fn set_pixel(&mut self, x: usize, y: usize, on: bool) {
         self.display[y][x] = on;
     }
-    
+
     pub fn get_pixel(&self, x: usize, y: usize) -> bool {
         self.display[y][x]
     }
 
     fn execute_skp_vx(&mut self, x: usize) {
-        self.state.pc += if self.keyboard[self.state.v[x] as usize] { 2 } else { 0 };
+        self.state.pc += if self.keyboard[self.state.v[x] as usize] {
+            2
+        } else {
+            0
+        };
     }
 
     fn execute_sknp_vx(&mut self, x: usize) {
-        self.state.pc += if self.keyboard[self.state.v[x] as usize] { 0 } else { 2 };
+        self.state.pc += if self.keyboard[self.state.v[x] as usize] {
+            0
+        } else {
+            2
+        };
     }
 
     fn execute_ld_vx_dt(&mut self, x: usize) {
@@ -303,7 +322,7 @@ impl Chip8MachineState {
     fn execute_ld_vx_k(&mut self, x: usize) {
         self.state.pc -= 2;
         let key_press = self.keyboard.iter().position(|&x| x == true);
-        
+
         if key_press.is_some() {
             self.state.v[x] = key_press.unwrap() as u8;
             self.state.pc += 2;
@@ -327,22 +346,28 @@ impl Chip8MachineState {
     }
 
     fn execute_ld_b_vx(&mut self, x: usize) {
-        let index : usize = self.state.i.into();
+        let index: usize = self.state.i as usize;
 
         self.state.memory[index] = self.state.v[x] / 100;
         self.state.memory[index + 1] = (self.state.v[x] / 10) % 10;
         self.state.memory[index + 2] = (self.state.v[x] % 100) % 10;
     }
 
-    fn execute_ld_ref_i_vx(&mut self) {
-        for i in 0..self.state.v.len() {
+    fn execute_ld_ref_i_vx(&mut self, x: usize) {
+        for i in 0..=x {
             self.state.memory[self.state.i as usize + i] = self.state.v[i];
         }
     }
 
-    fn execute_ld_vx_ref_i(&mut self) {
-        for i in 0..self.state.v.len() {
+    fn execute_ld_vx_ref_i(&mut self, x: usize) {
+        for i in 0..=x {
             self.state.v[i] = self.state.memory[self.state.i as usize + i];
+        }
+    }
+
+    pub fn set_key(&mut self, key: usize, pressed: bool) {
+        if key < KEYBOARD_SIZE {
+            self.keyboard[key] = pressed;
         }
     }
 }
