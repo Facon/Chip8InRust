@@ -1,0 +1,83 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "cargo build",
+            "type": "shell",
+            "command": "cargo",
+            "args": ["build"],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "cargo test",
+            "type": "shell",
+            "command": "cargo",
+            "args": ["test"],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "cargo run",
+            "type": "shell",
+            "command": "cargo",
+            "args": ["run", "--release"],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "cargo tarpaulin",
+            "type": "shell",
+            "command": "cargo",
+            "args": ["tarpaulin", "--out", "Lcov", "--output-dir", "./coverage"],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "grcov",
+            "type": "shell",
+            "command": "grcov",
+            "args": ["./coverage", "--binary-path", "./target/debug", "-s", ".", "-t", "html",
+                "--branch", "--ignore-not-existing", "--ignore", "/*", "-o", "./coverage/html"],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "create coverage",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "cargo tarpaulin",
+                "grcov"
+            ],
+            "group": {
+                "kind": "test",
+                "isDefault": false
+            }
+        }
+    ]
+}
